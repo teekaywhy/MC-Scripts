@@ -1,29 +1,11 @@
 #!/bin/bash
-# Backup minecraft world and delete backups older than 7 days with SMB authentication
-
-# SMB credentials and mount details
-SMB_USER="your_username"
-SMB_PASS="your_password"
-SMB_SERVER="your_server_address"
-SMB_SHARE="your_share_name"
-MOUNT_POINT="/mnt/rstore"
+# Backup minecraft world and ensure at least 7 backup copies are kept
 
 # Get today's date
 today=$(date +%d-%m-%y)
 
-# Backup directory
-backup_dir="$MOUNT_POINT/Backup/MC/Lascaux"
-
-# Mount the SMB share
-echo "Mounting SMB share..."
-if ! mountpoint -q "$MOUNT_POINT"; then
-    sudo mkdir -p "$MOUNT_POINT"
-    sudo mount -t cifs "//$SMB_SERVER/$SMB_SHARE" "$MOUNT_POINT" -o username="$SMB_USER",password="$SMB_PASS",vers=3.0
-    if [ $? -ne 0 ]; then
-        echo "Failed to mount SMB share. Exiting."
-        exit 1
-    fi
-fi
+# Backup directory (assumed to be mounted via fstab)
+backup_dir="/mnt/rstore/Backup/MC/Lascaux"
 
 # Send commands to Minecraft screen session
 screen -S Caves -X stuff '/say Backing up world, saving data...\n'
@@ -38,14 +20,22 @@ rsync -r --mkpath ~/fabric/Lascaux "$backup_dir/Lascaux$today"
 screen -S Caves -X stuff 'save-on\n'
 screen -S Caves -X stuff '/say Backup complete. Saving re-enabled.\n'
 
-# Find and delete backups older than 7 days
-find "$backup_dir" -name "Lascaux*" -mtime +7 -exec rm -rf {} +
+# Count current backups
+backup_count=$(find "$backup_dir" -name "Lascaux*" -type d | wc -l)
+echo "Current number of backups: $backup_count"
 
-# Unmount the SMB share
-echo "Unmounting SMB share..."
-sudo umount "$MOUNT_POINT"
-if [ $? -ne 0 ]; then
-    echo "Warning: Failed to unmount SMB share"
+# Minimum number of backups to keep
+MIN_BACKUPS=7
+
+# Only delete backups older than 7 days if we have more than MIN_BACKUPS
+if [ "$backup_count" -gt "$MIN_BACKUPS" ]; then
+    echo "Enough backups exist, removing those older than 7 days..."
+    find "$backup_dir" -name "Lascaux*" -mtime +7 -exec rm -rf {} +
+    if [ $? -eq 0 ]; then
+        echo "Old backups removed successfully"
+    else
+        echo "Warning: Some old backups could not be deleted"
+    fi
 else
-    echo "SMB share unmounted successfully"
+    echo "Not enough backups ($backup_count < $MIN_BACKUPS), skipping deletion of old backups"
 fi
