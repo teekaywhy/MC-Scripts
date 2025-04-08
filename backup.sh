@@ -42,9 +42,9 @@ send_cmd "/say Backup complete. Saving re-enabled."
 duration=$((end_time - start_time))
 backup_size=$(du -sh "$backup_dir/Lascbkup$today" | cut -f1)
 
-# Extract transfer stats from rsync
-bytes_transferred=$(grep "Total transferred file size" /tmp/rsync_stats | awk '{print $5}')
-speed=$(grep "bytes/sec" /tmp/rsync_stats | awk '{print $2}')
+# Extract transfer stats from rsync and remove commas
+bytes_transferred=$(grep "Total transferred file size" /tmp/rsync_stats | awk '{print $5}' | tr -d ',')
+speed=$(grep "bytes/sec" /tmp/rsync_stats | awk '{print $2}' | tr -d ',')
 rm /tmp/rsync_stats
 
 # Log backup details
@@ -53,8 +53,10 @@ log "Backup size: $backup_size"
 log "Bytes transferred: $bytes_transferred"
 log "Duration: $duration seconds"
 if [ $duration -gt 0 ]; then
-    speed_mb=$((bytes_transferred / duration / 1048576))
+    speed_mb=$(($bytes_transferred / $duration / 1048576))
     log "Average speed: $speed_mb MB/s"
+else
+    log "Average speed: N/A (duration was 0 seconds)"
 fi
 log "Rsync reported speed: $speed bytes/sec"
 
